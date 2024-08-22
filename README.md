@@ -1,3 +1,0 @@
-PingMe
-
-Easy Ping app ;-)
