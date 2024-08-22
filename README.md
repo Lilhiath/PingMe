@@ -1,3 +1,3 @@
 PingMe
 
-Easy portals and Mail servers ping ;-)
+Easy Ping app ;-)
