@@ -3,6 +3,8 @@ package com.example.pingme
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.res.Resources
+import android.net.Uri
 import android.os.*
 import android.view.*
 import android.widget.*
@@ -52,26 +54,62 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun addTestButton(testConfig: TestConfig) {
-        val statusButton = Button(this)
-        statusButton.text = "${testConfig.name}\nWaiting for test..."
-        statusButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_circle_grey, 0, 0, 0)
-
-        statusButton.tag = testConfig
-        buttonContainer.addView(statusButton)
-
-        statusButton.setOnClickListener {
-            showButtonMenu(statusButton, testConfig)
+        val horizontalLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
         }
 
+        val statusButton = Button(this).apply {
+            text = "${testConfig.name}\nWaiting for test..."
+            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_circle_grey, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        statusButton.tag = testConfig
+        horizontalLayout.addView(statusButton)
+
+        val openLinkButton = Button(this).apply {
+            text = "🌐"
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        openLinkButton.setOnClickListener {
+            val url = "http://${testConfig.address}:${testConfig.port}"
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                startActivity(intent)
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error opening URL: $url", e)
+                Toast.makeText(this@MainActivity, "Invalid URL", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        horizontalLayout.addView(openLinkButton)
+
+        buttonContainer.addView(horizontalLayout)
+
+        // Programma l'esecuzione immediata e poi periodica del test
         val testRunnable = object : Runnable {
             override fun run() {
                 executeTest(statusButton)
                 handler.postDelayed(this, testConfig.interval)
             }
         }
+
         tasks[statusButton] = testRunnable
-        handler.postDelayed(testRunnable, testConfig.interval)
         failureCounts[statusButton] = 0 // Initialize failure count
+
+        // Aggiorna l'interfaccia utente prima di eseguire il test
+        statusButton.text = "${testConfig.name}\nRunning first test..."
+        statusButton.invalidate()  // Forza il ridisegno del pulsante
+
+        // Esegui il test immediatamente
+        executeTest(statusButton)
+
+        // Programma il test a intervalli
+        handler.postDelayed(testRunnable, testConfig.interval)
     }
 
     private fun showInputDialog() {
@@ -121,31 +159,83 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun createTestButton(config: TestConfig) {
+        val horizontalLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+
         val statusButton = Button(this).apply {
             text = "${config.name}\nWaiting for test..."
             setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_circle_grey, 0, 0, 0)
+            val params = LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f
+            ).apply {
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            layoutParams = params
         }
 
         statusButton.tag = config
-        testConfigs.add(config)
-        saveTestConfigs()
-
         statusButton.setOnClickListener {
             showButtonMenu(statusButton, config)
         }
+        horizontalLayout.addView(statusButton)
 
-        buttonContainer.addView(statusButton)
+        val openLinkButton = Button(this).apply {
+            text = "🌐"
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = 8.dpToPx()
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            layoutParams = params
+        }
 
+        openLinkButton.setOnClickListener {
+            val url = "http://${config.address}:${config.port}"
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                startActivity(intent)
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error opening URL: $url", e)
+                Toast.makeText(this@MainActivity, "Invalid URL", Toast.LENGTH_SHORT).show()
+            }
+
+
+        }
+
+        horizontalLayout.addView(openLinkButton)
+        buttonContainer.addView(horizontalLayout)
+
+        testConfigs.add(config)
+        saveTestConfigs()
+
+        // Programma l'esecuzione immediata e poi periodica del test
         val testRunnable = object : Runnable {
             override fun run() {
                 executeTest(statusButton)
                 handler.postDelayed(this, config.interval)
             }
         }
-        tasks[statusButton] = testRunnable
+
+        // Esegui il test immediatamente
+        executeTest(statusButton)
+
+        // Programma il test a intervalli
         handler.postDelayed(testRunnable, config.interval)
-        failureCounts[statusButton] = 0 // Initialize failure count
     }
+
+
+
+    fun Int.dpToPx(): Int {
+        val density = Resources.getSystem().displayMetrics.density
+        return (this * density).toInt()
+    }
+
+
 
     private fun showButtonMenu(button: Button, testConfig: TestConfig) {
         val popupMenu = PopupMenu(this, button)
@@ -157,7 +247,7 @@ class MainActivity : AppCompatActivity() {
                     true
                 }
                 R.id.delete -> {
-                    deleteTestButton(button)
+                    removeTestButton(button)
                     true
                 }
                 else -> false
@@ -232,8 +322,13 @@ class MainActivity : AppCompatActivity() {
             saveTestConfigs()
             button.text = "${updatedConfig.name}\nWaiting for test..."
 
-            // Restart the test with the updated configuration
+            // Ferma il runnable corrente
             tasks[button]?.let { handler.removeCallbacks(it) }
+
+            // Esegui il test immediatamente
+            executeTest(button)
+
+            // Riparti con il test aggiornato e programma a intervalli
             val testRunnable = object : Runnable {
                 override fun run() {
                     executeTest(button)
@@ -248,14 +343,38 @@ class MainActivity : AppCompatActivity() {
         builder.show()
     }
 
-    private fun deleteTestButton(button: Button) {
-        buttonContainer.removeView(button)
-        tasks[button]?.let { handler.removeCallbacks(it) }
-        tasks.remove(button)
-        failureCounts.remove(button)
-        testConfigs.remove(button.tag)
-        saveTestConfigs()
+    private fun removeTestButton(statusButton: Button) {
+        // Cancella il Runnable associato
+        tasks[statusButton]?.let {
+            handler.removeCallbacks(it)
+        }
+
+        // Rimuovi il pulsante dalla mappa di tasks
+        tasks.remove(statusButton)
+
+        // Rimuovi il pulsante dalla mappa di conteggio fallimenti
+        failureCounts.remove(statusButton)
+
+        // Rimuovi il pulsante dal layout
+        val parent = statusButton.parent as? LinearLayout
+        parent?.let {
+            buttonContainer.removeView(it)
+        }
+
+        // Aggiorna l'interfaccia utente
+        buttonContainer.invalidate()
+        buttonContainer.requestLayout()
     }
+
+
+
+    //private fun deleteTestButton(button: Button) {
+      //tasks[button]?.let { handler.removeCallbacks(it) }
+      //  tasks.remove(button)
+       // failureCounts.remove(button)
+       // testConfigs.remove(button.tag)
+       // saveTestConfigs()
+    //}
 
     private fun executeTest(button: Button) {
         val testConfig = button.tag as? TestConfig ?: return
@@ -266,19 +385,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadTestConfigs() {
-        val sharedPrefs = getSharedPreferences("TestConfigs", Context.MODE_PRIVATE)
-        val json = sharedPrefs.getString("configs", "[]")
-        val type = object : TypeToken<MutableList<TestConfig>>() {}.type
-        testConfigs.addAll(Gson().fromJson(json, type))
+    private fun saveTestConfigs() {
+        try {
+            val sharedPrefs = getSharedPreferences("TestConfigs", Context.MODE_PRIVATE)
+            val editor = sharedPrefs.edit()
+            val json = Gson().toJson(testConfigs)
+            editor.putString("configs", json)
+            editor.apply() // Usa apply() per una scrittura asincrona
+            Log.d("MainActivity", "Test configs saved successfully.")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error saving test configs", e)
+        }
     }
 
-    private fun saveTestConfigs() {
-        val sharedPrefs = getSharedPreferences("TestConfigs", Context.MODE_PRIVATE)
-        val editor = sharedPrefs.edit()
-        val json = Gson().toJson(testConfigs)
-        editor.putString("configs", json)
-        editor.apply()
+    private fun loadTestConfigs() {
+        try {
+            val sharedPrefs = getSharedPreferences("TestConfigs", Context.MODE_PRIVATE)
+            val json = sharedPrefs.getString("configs", "[]")
+            val type = object : TypeToken<MutableList<TestConfig>>() {}.type
+            testConfigs.clear() // Pulisce la lista esistente
+            testConfigs.addAll(Gson().fromJson(json, type))
+            Log.d("MainActivity", "Test configs loaded successfully.")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error loading test configs", e)
+        }
     }
 
     private fun isNotificationChannelEnabled(channelId: String): Boolean {
@@ -355,6 +485,11 @@ class MainActivity : AppCompatActivity() {
         override fun onPostExecute(result: Pair<Boolean, Long>) {
             callback(result.first, result.second)
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        saveTestConfigs()
     }
 
 
