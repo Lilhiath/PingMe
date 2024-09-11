@@ -1,30 +1,42 @@
 package com.example.pingme
 
-import android.app.*
+import android.app.AlertDialog
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Resources
 import android.net.Uri
-import android.os.*
-import android.view.*
-import android.widget.*
+import android.os.AsyncTask
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
+import android.util.Log
+import android.view.Gravity
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.PopupMenu
+import android.widget.Spinner
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.FileProvider
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.io.File
+import java.io.FileWriter
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
-import android.os.Bundle
-import android.provider.Settings
-import android.util.Log
-import android.widget.Button
-import android.widget.LinearLayout
-import com.example.pingme.R
-import java.util.*
-import javax.net.ssl.SSLSocket
-import javax.net.ssl.SSLSocketFactory
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -46,12 +58,93 @@ class MainActivity : AppCompatActivity() {
             showInputDialog()
         }
 
-        // Usa una copia della lista per evitare ConcurrentModificationException
+        findViewById<Button>(R.id.viewLogButton).setOnClickListener {
+            val intent = Intent(this, LogActivity::class.java)
+            startActivity(intent)
+        }
+
+        findViewById<Button>(R.id.shareLogButton).setOnClickListener {
+            shareLogFile(this)
+        }
+
         val configsCopy = testConfigs.toList()
         configsCopy.forEach { config ->
             addTestButton(config)
         }
     }
+
+
+    val LOG_FILE_NAME = "test_failures_log.txt"
+    val MAX_LOG_ENTRIES = 100
+
+    private fun addFailureLog(name: String, address: String, port: Int) {
+        val logFile = File(filesDir, "test_failures.log")
+
+        // Verifica se il file esiste e crealo se non esiste
+        if (!logFile.exists()) {
+            try {
+                logFile.createNewFile()
+                Log.d("MainActivity", "File di log creato: ${logFile.absolutePath}")
+            } catch (e: IOException) {
+                Log.e("MainActivity", "Errore durante la creazione del file di log", e)
+            }
+        }
+
+        // Aggiungi un nuovo log
+        val currentTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val logEntry = "$currentTime - $name - $address - $port\n"
+
+        try {
+            FileWriter(logFile, true).use { writer ->
+                writer.append(logEntry)
+            }
+            Log.d("MainActivity", "Log aggiunto: $logEntry")
+        } catch (e: IOException) {
+            Log.e("MainActivity", "Errore durante l'aggiunta al file di log", e)
+        }
+
+        // Mantieni solo gli ultimi 100 log
+        limitLogFileEntries(logFile)
+    }
+
+    private fun limitLogFileEntries(logFile: File) {
+        try {
+            val lines = logFile.readLines()
+            if (lines.size > 100) {
+                val linesToKeep = lines.takeLast(100)
+                logFile.writeText(linesToKeep.joinToString("\n"))
+                Log.d("MainActivity", "File di log limitato agli ultimi 100 log")
+            }
+        } catch (e: IOException) {
+            Log.e("MainActivity", "Errore durante il limite delle righe del file di log", e)
+        }
+    }
+
+    // Funzione per permettere la condivisione/copia del file di log
+    private fun shareLogFile(mainActivity: MainActivity) {
+        val logFile = File(filesDir, "test_failures.log")
+
+        if (logFile.exists()) {
+            try {
+                val packageName = "com.example.pingme"
+                val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", logFile)
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, "Test Failures Log")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+
+                startActivity(Intent.createChooser(intent, "Condividi log"))
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Failed to share log", e)
+                Toast.makeText(this, "Errore durante la condivisione del log", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(this, "Il file di log non esiste", Toast.LENGTH_SHORT).show()
+        }
+    }
+
 
     private fun addTestButton(testConfig: TestConfig) {
         val horizontalLayout = LinearLayout(this).apply {
@@ -65,6 +158,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         statusButton.tag = testConfig
+        statusButton.setOnClickListener {
+            showButtonMenu(statusButton, testConfig) // Associa il menu
+        }
         horizontalLayout.addView(statusButton)
 
         val openLinkButton = Button(this).apply {
@@ -87,7 +183,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         horizontalLayout.addView(openLinkButton)
-
         buttonContainer.addView(horizontalLayout)
 
         // Programma l'esecuzione immediata e poi periodica del test
@@ -110,6 +205,12 @@ class MainActivity : AppCompatActivity() {
 
         // Programma il test a intervalli
         handler.postDelayed(testRunnable, testConfig.interval)
+
+        // Aggiungi la configurazione dei test se non è già presente
+        if (testConfigs.none { it == testConfig }) {
+            testConfigs.add(testConfig)
+            saveTestConfigs()
+        }
     }
 
     private fun showInputDialog() {
@@ -158,6 +259,20 @@ class MainActivity : AppCompatActivity() {
         builder.show()
     }
 
+    private fun getLogFileContent(context: Context): String {
+        val logFile = File(context.filesDir, "test_failures.log")
+        return if (logFile.exists()) {
+            try {
+                logFile.readText()
+            } catch (e: IOException) {
+                "Errore nella lettura del file di log: ${e.message}"
+            }
+        } else {
+            "Il file di log non esiste."
+        }
+    }
+
+
     private fun createTestButton(config: TestConfig) {
         val horizontalLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -203,15 +318,16 @@ class MainActivity : AppCompatActivity() {
                 Log.e("MainActivity", "Error opening URL: $url", e)
                 Toast.makeText(this@MainActivity, "Invalid URL", Toast.LENGTH_SHORT).show()
             }
-
-
         }
 
         horizontalLayout.addView(openLinkButton)
         buttonContainer.addView(horizontalLayout)
 
-        testConfigs.add(config)
-        saveTestConfigs()
+        // Aggiungi la configurazione dei test se non è già presente
+        if (testConfigs.none { it == config }) {
+            testConfigs.add(config)
+            saveTestConfigs() // Salva le configurazioni aggiornate
+        }
 
         // Programma l'esecuzione immediata e poi periodica del test
         val testRunnable = object : Runnable {
@@ -311,37 +427,37 @@ class MainActivity : AppCompatActivity() {
         builder.setPositiveButton("OK") { _, _ ->
             val name = inputName.text.toString()
             val address = inputAddress.text.toString()
-            val port = inputPort.text.toString().toIntOrNull() ?: 80
-            val interval = (inputInterval.text.toString().toLongOrNull() ?: 5) * 1000
-            val maxFailures = inputFailures.text.toString().toIntOrNull() ?: 3
+            val port = inputPort.text.toString().toIntOrNull() ?: run {
+                Toast.makeText(this@MainActivity, "Invalid port number", Toast.LENGTH_SHORT).show()
+                return@setPositiveButton
+            }
+            val interval = (inputInterval.text.toString().toLongOrNull() ?: run {
+                Toast.makeText(this@MainActivity, "Invalid interval", Toast.LENGTH_SHORT).show()
+                return@setPositiveButton
+            }) * 1000
+            val maxFailures = inputFailures.text.toString().toIntOrNull() ?: run {
+                Toast.makeText(this@MainActivity, "Invalid max failures", Toast.LENGTH_SHORT).show()
+                return@setPositiveButton
+            }
             val testType = testTypeSpinner.selectedItem.toString()
 
             // Update the test configuration
             val updatedConfig = TestConfig(address, port, interval, testType, name, maxFailures)
-            testConfigs[testConfigs.indexOf(testConfig)] = updatedConfig
-            saveTestConfigs()
-            button.text = "${updatedConfig.name}\nWaiting for test..."
+            val index = testConfigs.indexOf(testConfig)
+            if (index != -1) {
+                testConfigs[index] = updatedConfig
+                saveTestConfigs() // Salva le configurazioni aggiornate
 
-            // Ferma il runnable corrente
-            tasks[button]?.let { handler.removeCallbacks(it) }
-
-            // Esegui il test immediatamente
-            executeTest(button)
-
-            // Riparti con il test aggiornato e programma a intervalli
-            val testRunnable = object : Runnable {
-                override fun run() {
-                    executeTest(button)
-                    handler.postDelayed(this, updatedConfig.interval)
-                }
+                // Remove and re-add the button with updated configuration
+                removeTestButton(button)
+                addTestButton(updatedConfig)
             }
-            tasks[button] = testRunnable
-            handler.postDelayed(testRunnable, updatedConfig.interval)
-            failureCounts[button] = 0 // Reset failure count
         }
         builder.setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }
         builder.show()
     }
+
+
 
     private fun removeTestButton(statusButton: Button) {
         // Cancella il Runnable associato
@@ -355,6 +471,13 @@ class MainActivity : AppCompatActivity() {
         // Rimuovi il pulsante dalla mappa di conteggio fallimenti
         failureCounts.remove(statusButton)
 
+        // Rimuovi la configurazione di test dal testConfigs
+        val testConfig = statusButton.tag as? TestConfig
+        if (testConfig != null) {
+            testConfigs.remove(testConfig)
+            saveTestConfigs() // Salva le configurazioni aggiornate
+        }
+
         // Rimuovi il pulsante dal layout
         val parent = statusButton.parent as? LinearLayout
         parent?.let {
@@ -365,16 +488,6 @@ class MainActivity : AppCompatActivity() {
         buttonContainer.invalidate()
         buttonContainer.requestLayout()
     }
-
-
-
-    //private fun deleteTestButton(button: Button) {
-      //tasks[button]?.let { handler.removeCallbacks(it) }
-      //  tasks.remove(button)
-       // failureCounts.remove(button)
-       // testConfigs.remove(button.tag)
-       // saveTestConfigs()
-    //}
 
     private fun executeTest(button: Button) {
         val testConfig = button.tag as? TestConfig ?: return
@@ -521,6 +634,7 @@ class MainActivity : AppCompatActivity() {
                     failureCounts[button] = 0
                 } else {
                     failureCounts[button] = currentFailures + 1
+                    addFailureLog(name, address, port)
                     if (failureCounts[button]!! >= maxFailures) {
                         sendNotification("Test Failed", "$name has failed $maxFailures times consecutively.")
                         failureCounts[button] = 0
@@ -575,6 +689,7 @@ class MainActivity : AppCompatActivity() {
                 failureCounts[button] = currentFailures + 1
                 if (failureCounts[button]!! >= maxFailures) {
                     sendNotification("Test Failed", "$name has failed $maxFailures times consecutively.")
+                    addFailureLog(name, address, port) // Aggiungi questa riga
                     failureCounts[button] = 0
                 }
             }
