@@ -450,7 +450,7 @@ class MainActivity : AppCompatActivity() {
         builder.show()
     }
 
-
+    // Funzione per cancellare i test
     private fun removeTestButton(statusButton: Button) {
         // Cancella il Runnable associato
         tasks[statusButton]?.let {
@@ -481,6 +481,7 @@ class MainActivity : AppCompatActivity() {
         buttonContainer.requestLayout()
     }
 
+    //tasto di scelta ping/mail
     private fun executeTest(button: Button) {
         val testConfig = button.tag as? TestConfig ?: return
 
@@ -490,6 +491,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    //Funzione di salvataggio dei tasti/test
     private fun saveTestConfigs() {
         try {
             val sharedPrefs = getSharedPreferences("TestConfigs", Context.MODE_PRIVATE)
@@ -503,6 +505,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    //Funzione di caricamento dei tasti/test salvati
     private fun loadTestConfigs() {
         try {
             val sharedPrefs = getSharedPreferences("TestConfigs", Context.MODE_PRIVATE)
@@ -516,6 +519,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // funzione per la verifica se le notifiche sono abilitate
     private fun isNotificationChannelEnabled(channelId: String): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -525,7 +529,7 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
-
+    // funzione che crea il canale di notifica in caso chiedendo all'utente
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channelId = CHANNEL_ID
@@ -555,6 +559,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    //funzione di invio delle notifiche
     private fun sendNotification(title: String, message: String) {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification) // Usa un'icona valida
@@ -569,35 +574,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private class PingTask(
-        private val address: String,
-        private val port: Int,
-        private val callback: (Boolean, Long) -> Unit
-    ) : AsyncTask<Void, Void, Pair<Boolean, Long>>() {
-
-        override fun doInBackground(vararg params: Void?): Pair<Boolean, Long> {
-            return try {
-                val start = System.currentTimeMillis()
-                val process = Runtime.getRuntime().exec("ping -c 1 $address")
-                val exitCode = process.waitFor()
-                val end = System.currentTimeMillis()
-                Pair(exitCode == 0, end - start)
-            } catch (e: IOException) {
-                Pair(false, -1)
-            }
-        }
-
-        override fun onPostExecute(result: Pair<Boolean, Long>) {
-            callback(result.first, result.second)
-        }
-    }
-
     override fun onPause() {
         super.onPause()
         saveTestConfigs()
     }
 
-
+    //funzione che avvia il test ping
     private fun checkPing(button: Button, address: String, port: Int, name: String, maxFailures: Int) {
         val pingTask = object : AsyncTask<Void, Void, Pair<Boolean, Long>>() {
             override fun doInBackground(vararg params: Void?): Pair<Boolean, Long> {
@@ -637,7 +619,6 @@ class MainActivity : AppCompatActivity() {
         pingTask.execute()
     }
 
-
     private class MailServerTask(
         private val address: String,
         private val port: Int,
@@ -663,10 +644,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
-
-
-
     private fun checkMailServer(button: Button, address: String, port: Int, name: String, maxFailures: Int) {
         MailServerTask(address, port) { isReachable, responseTime ->
             val statusText = "$name\nMail Server Response Time: $responseTime ms"
@@ -681,7 +658,7 @@ class MainActivity : AppCompatActivity() {
                 failureCounts[button] = currentFailures + 1
                 if (failureCounts[button]!! >= maxFailures) {
                     sendNotification("Test Failed", "$name has failed $maxFailures times consecutively.")
-                    addFailureLog(name, address, port) // Aggiungi questa riga
+                    addFailureLog(name, address, port)
                     failureCounts[button] = 0
                 }
             }
