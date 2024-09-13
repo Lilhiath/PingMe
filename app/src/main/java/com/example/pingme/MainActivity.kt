@@ -6,7 +6,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.content.res.Resources
 import android.net.Uri
 import android.os.AsyncTask
 import android.os.Build
@@ -288,7 +287,6 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 1f
             ).apply {
-                marginStart = 8.dpToPx()
                 gravity = Gravity.CENTER_VERTICAL
             }
             layoutParams = params
@@ -306,7 +304,6 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                marginStart = 8.dpToPx()
                 gravity = Gravity.CENTER_VERTICAL
             }
             layoutParams = params
@@ -347,15 +344,7 @@ class MainActivity : AppCompatActivity() {
         handler.postDelayed(testRunnable, config.interval)
     }
 
-
-
-    fun Int.dpToPx(): Int {
-        val density = Resources.getSystem().displayMetrics.density
-        return (this * density).toInt()
-    }
-
-
-
+    // Visualizza il menu per modifica ed elimina
     private fun showButtonMenu(button: Button, testConfig: TestConfig) {
         val popupMenu = PopupMenu(this, button)
         popupMenu.menuInflater.inflate(R.menu.test_button_menu, popupMenu.menu)
@@ -375,6 +364,7 @@ class MainActivity : AppCompatActivity() {
         popupMenu.show()
     }
 
+    // Menù di configurazione del test
     private fun showEditDialog(button: Button, testConfig: TestConfig) {
         val builder = AlertDialog.Builder(this)
         builder.setTitle("Edit Test Details")
@@ -459,7 +449,6 @@ class MainActivity : AppCompatActivity() {
         builder.setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }
         builder.show()
     }
-
 
 
     private fun removeTestButton(statusButton: Button) {
