@@ -73,10 +73,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
     val LOG_FILE_NAME = "test_failures_log.txt"
     val MAX_LOG_ENTRIES = 100
 
+    // Funzione per la creazione dei log
     private fun addFailureLog(name: String, address: String, port: Int) {
         val logFile = File(filesDir, "test_failures.log")
 
@@ -107,6 +107,7 @@ class MainActivity : AppCompatActivity() {
         limitLogFileEntries(logFile)
     }
 
+    // Funzione che mantiene solo gli ultimi 100 inserimenti del file di log
     private fun limitLogFileEntries(logFile: File) {
         try {
             val lines = logFile.readLines()
@@ -120,7 +121,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Funzione per permettere la condivisione/copia del file di log
+    // Funzione per permettere la condivisione del file di log
     private fun shareLogFile(mainActivity: MainActivity) {
         val logFile = File(filesDir, "test_failures.log")
 
@@ -145,7 +146,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
+    // Funzione per l'aggiunta dei pulsanti/test e visualizzazione
     private fun addTestButton(testConfig: TestConfig) {
         val horizontalLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -206,13 +207,14 @@ class MainActivity : AppCompatActivity() {
         // Programma il test a intervalli
         handler.postDelayed(testRunnable, testConfig.interval)
 
-        // Aggiungi la configurazione dei test se non è già presente
+        // Salva la configurazione dei test se non è già presente
         if (testConfigs.none { it == testConfig }) {
             testConfigs.add(testConfig)
             saveTestConfigs()
         }
     }
 
+    // Funzione che visualizza il menu di inserimento dati utente
     private fun showInputDialog() {
         val builder = AlertDialog.Builder(this)
         builder.setTitle("Enter Test Details")
@@ -272,7 +274,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
+    // Funzione per la creazione dei pulsanti/test e visualizzazione
     private fun createTestButton(config: TestConfig) {
         val horizontalLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -286,6 +288,7 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 1f
             ).apply {
+                marginStart = 8.dpToPx()
                 gravity = Gravity.CENTER_VERTICAL
             }
             layoutParams = params
